@@ -14,20 +14,30 @@
 class SoundSystem
 {
   char current_track [ 256 ] ;
+#ifdef USE_SDL_MIXER
+  Mix_Music * music ;
+#else
   slScheduler *sched ;
+#endif
 
 public:
   SoundSystem () ;
+  ~SoundSystem() ;
 
   void update () ;
   void playSfx ( int sound ) ;
 
   void setSafetyMargin ( float t = 0.25 )
   {
+#ifndef USE_SDL_MIXER
     sched -> setSafetyMargin ( t ) ;
+#endif
   }
 
   void  change_track ( char *fname ) ;
+  void    stop_music () ;
+  void   start_music () ;
+
   void disable_music () ;
   void  enable_music () ;
 

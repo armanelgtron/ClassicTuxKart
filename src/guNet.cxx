@@ -101,7 +101,7 @@ int guUDPConnection::connect ( char *hostname, int _port )
   {
     perror ( "gethostname" ) ;
     fprintf ( stderr, "net: Failed to find this machine's hostname.\n" ) ;
-    exit ( 1 ) ;
+    return 0 ;
   }
 
   int delta = strcmp ( myname, hostname ) ;
@@ -109,7 +109,7 @@ int guUDPConnection::connect ( char *hostname, int _port )
   if ( delta == 0 )
   {
     fprintf ( stderr, "net: '%s' is this machine!\n", hostname ) ;
-    exit ( 1 ) ;
+    //exit ( 1 ) ;
   }
 
   if ( delta < 0 )
@@ -137,7 +137,7 @@ int guUDPConnection::connect ( char *hostname, int _port )
   if ( ! host )
   {
     fprintf ( stderr, "No match for host: '%s'\n", hostname ) ;
-    exit ( 1 ) ;
+    return 0 ;
   }
   
   fprintf ( stderr, "Found host %s at %u.%u.%u.%u\n", hostname,

@@ -27,6 +27,12 @@ void PlayerKartDriver::incomingJoystick  ( JoyInfo *j )
     useAttachment () ;
   }
 
+  if ( j -> hits & 0x08 )  /* D == Rescue */
+  {
+    sound -> playSfx ( SOUND_BEEP ) ;
+    rescue = TRUE ;
+  }
+
   if ( on_ground )
   {
     if ( ( j -> buttons & 0x20 ) &&
@@ -49,19 +55,14 @@ void PlayerKartDriver::incomingJoystick  ( JoyInfo *j )
     if ( j -> hits & 0x10 )  /* R == Jump */
       velocity.xyz[2] += JUMP_IMPULSE ;
 
-    if ( j -> hits & 0x08 )  /* D == Unused */
-    {
-      sound -> playSfx ( SOUND_BEEP ) ;
-      rescue = TRUE ;
-    }
-
     if ( j -> buttons & 2 )  /* B == Active Braking */
       velocity.xyz[1] -= MAX_BRAKING * true_delta_t ;
     else
-    if ( ( j -> buttons & 1 ) &&
+    if ( ( j -> buttons & 1 ) /*&&
           velocity.xyz[1] < MAX_NATURAL_VELOCITY *
-                       ( 1.0f + wheelie_angle/90.0f ) )  /* A == Accellerate */
-      velocity.xyz[1] += MAX_ACCELLERATION * true_delta_t ;
+                       ( 1.0f + wheelie_angle/90.0f ) */)  /* A == Accellerate */
+      //velocity.xyz[1] += MAX_ACCELLERATION * true_delta_t ;
+      velocity.xyz[1] += fmin( MAX_ACCELLERATION * ( 1.0f + velocity.xyz[1]/360.0f ) , MAX_NATURAL_VELOCITY * ( 1.0f + wheelie_angle/90.0f ) - velocity.xyz[1] - ( curr_pos.hpr[1] / 3.f ) ) * true_delta_t ;
     else
     if ( velocity.xyz[1] > MAX_DECELLERATION * true_delta_t )
       velocity.xyz[1] -= MAX_DECELLERATION * true_delta_t ;
@@ -85,6 +86,8 @@ void PlayerKartDriver::incomingJoystick  ( JoyInfo *j )
     velocity.xyz[0] = (s >= 0) ? (s*s) : -(s*s) ;
   }
 
+  curr_pos.hpr[1] -= curr_pos.hpr[1]*0.025f;
+  curr_pos.hpr[2] -= curr_pos.hpr[2]*0.025f;
   velocity.xyz[2] -= GRAVITY * true_delta_t ;
 }
 

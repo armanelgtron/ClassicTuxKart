@@ -163,23 +163,36 @@ char *aboutText [] =
 void drawVersionsText ()
 {
   char str [ 256 ] ;
+  int i = 250;
 
 #ifdef VERSION
   sprintf ( str, "TuxKart: Version: %s", VERSION ) ;
 #else
   sprintf ( str, "TuxKart: Unknown Version." ) ;
 #endif
-  drawDropShadowText ( str, 15, 20, 250 ) ;
 
+  drawDropShadowText ( str, 15, 20, i ) ;
+
+  i -= 25;
   sprintf ( str, "PLIB Version: %s", ssgGetVersion() ) ;
-  drawDropShadowText ( str, 15, 20, 225 ) ;
+  drawDropShadowText ( str, 15, 20, i ) ;
 
+#ifdef USE_SDL_MIXER
+  i -= 25;
+  const SDL_version * link_version = Mix_Linked_Version() ;
+  sprintf ( str, "SDL Mixer Version: %d.%d.%d", link_version->major, link_version->minor, link_version->patch ) ;
+  drawDropShadowText ( str, 15, 20, i ) ;
+#endif
+
+  i -= 25;
   sprintf ( str, "OpenGL Version: %s", glGetString ( GL_VERSION ) ) ;
-  drawDropShadowText ( str, 15, 20, 200 ) ;
+  drawDropShadowText ( str, 15, 20, i ) ;
 
+  i -= 25;
   sprintf ( str, "OpenGL Vendor: %s", glGetString ( GL_VENDOR ) ) ;
-  drawDropShadowText ( str, 15, 20, 175 ) ;
+  drawDropShadowText ( str, 15, 20, i ) ;
 
+  i -= 25;
   sprintf ( str, "OpenGL Renderer: %s", glGetString ( GL_RENDERER ) ) ;
 
   if ( strlen ( str ) > 50 )
@@ -197,7 +210,7 @@ void drawVersionsText ()
     }
   }
 
-  drawDropShadowText ( str, 15, 20, 150 ) ;
+  drawDropShadowText ( str, 15, 20, i ) ;
 
   if ( versions_timer & 8 )
     drawDropShadowText ( "Press SPACE to continue",
@@ -291,32 +304,57 @@ static char *pos_string [] =
 
 void drawScore ()
 {
+  if ( cam_follow > NUM_KARTS || cam_follow < 0 )
+  {
+    drawDropShadowText ( "???", 18, 450, 410 ) ;
+    return;
+  }
+  
   char str [ 20 ] ;
 
-  if ( kart[0]->getVelocity()->xyz[1] < 0 )
+  if ( kart[cam_follow]->getVelocity()->xyz[1] < 0 )
     sprintf ( str, "Reverse" ) ;
   else
-    sprintf(str,"%3dmph",(int)(kart[0]->getVelocity()->xyz[1]/MILES_PER_HOUR));
+  #if 0
+    sprintf(str,"%3dmph",(int)(kart[cam_follow]->getVelocity()->xyz[1]/MILES_PER_HOUR));
+  #else
+    sprintf(str,"%3dkm/h",(int)roundf(kart[cam_follow]->getVelocity()->xyz[1]/KILOMETERS_PER_HOUR));
+  #endif
+  
+  if ( ! kart[cam_follow]->isOnGround() )
+  {
+    char str2 [ 20 ];
+    strcpy(str2, str);
+    sprintf ( str, "!%s", str2 ) ;
+  }
+    
 
   drawDropShadowText ( str, 18, 450, 410 ) ;
 
-  if ( kart[0]->getLap() < 0 )
+  if ( kart[cam_follow]->getLap() < 0 )
     sprintf ( str, "Not Started Yet!" ) ;
   else
-  if ( kart[0]->getLap() < num_laps_in_race - 1 )
+  if ( kart[cam_follow]->getLap() < num_laps_in_race - 1 )
+  {
     sprintf ( str, "%s - Lap %d",
-      pos_string [ kart[0]->getPosition() ],
-                   kart[0]->getLap() + 1 ) ;
+      pos_string [ kart[cam_follow]->getPosition() ],
+                   kart[cam_follow]->getLap() + 1 ) ;
+  }
+  else
+  if ( kart[cam_follow]->getLap() >= num_laps_in_race )
+  {
+    sprintf ( str, "Finished!" ) ;
+  }
   else
   {
     static int flasher = 0 ;
 
     if ( ++flasher & 32 )
       sprintf ( str, "%s - Last Lap!",
-        pos_string [ kart[0]->getPosition() ] ) ;
+        pos_string [ kart[cam_follow]->getPosition() ] ) ;
     else
       sprintf ( str, "%s",
-        pos_string [ kart[0]->getPosition() ] ) ;
+        pos_string [ kart[cam_follow]->getPosition() ] ) ;
   }
 
   drawDropShadowText ( str, 18, 450, 390 ) ;
@@ -353,6 +391,7 @@ void drawMap ()
 
 void drawGameOverText ()
 {
+  static int timerSlowdown = 0 ;
   static int timer = 0 ;
 
   glColor4f ( sin ( (float)timer/5.1f ) / 2.0f + 0.5f,
@@ -373,8 +412,10 @@ void drawGameOverText ()
     drawText ( "YOU WON THE RACE!", 40, 50, 280 ) ;
   }
 
-  if ( timer++ & 16 )
-    drawDropShadowText ( "Press R to replay this track", 15, 10, 30 ) ;
+  if ( timer & 16 )
+    drawDropShadowText ( "Press Escape to select a different track", 15, 10, 30 ) ;
+  
+  if ( timerSlowdown++ & 2 || timer & 4 ) ++timer ;
 }
 
 
@@ -399,6 +440,13 @@ void drawGameIntroText ()
   else
   if ( versions_timer++ < 1600 )
     drawVersionsText () ;
+}
+
+
+void drawGameNetText ()
+{
+  drawDropShadowText ( "Waiting on network player...", 20, 10, 410 ) ;
+  drawDropShadowText ( "Please make sure the other user is ready.", 12, 180, 385 ) ;
 }
 
 
@@ -439,30 +487,39 @@ void drawPlayerIcons ()
 
     /* Geeko */
 
+  if(num_karts > 1)
+  {
     x = (int) ( w * kart [ 1 ] -> getDistanceDownTrack () /
                     curr_track -> getTrackLength () ) ;
     glTexCoord2f ( .5,  0 ) ; glVertex2i ( x   , y    ) ;
     glTexCoord2f (  1,  0 ) ; glVertex2i ( x+64, y    ) ;
     glTexCoord2f (  1, .5 ) ; glVertex2i ( x+64, y+64 ) ;
     glTexCoord2f ( .5, .5 ) ; glVertex2i ( x   , y+64 ) ;
+  }
 
     /* BSOD */
 
+  if(num_karts > 2)
+  {
     x = (int) ( w * kart [ 2 ] -> getDistanceDownTrack () /
                     curr_track -> getTrackLength () ) ;
     glTexCoord2f ( .5, .5 ) ; glVertex2i ( x   , y    ) ;
     glTexCoord2f (  1, .5 ) ; glVertex2i ( x+64, y    ) ;
     glTexCoord2f (  1,  1 ) ; glVertex2i ( x+64, y+64 ) ;
     glTexCoord2f ( .5,  1 ) ; glVertex2i ( x   , y+64 ) ;
+  }
 
     /* Gown */
 
+  if(num_karts > 3)
+  {
     x = (int) ( w * kart [ 3 ] -> getDistanceDownTrack () /
                     curr_track -> getTrackLength () ) ;
     glTexCoord2f (  0,  0 ) ; glVertex2i ( x   , y    ) ;
     glTexCoord2f ( .5,  0 ) ; glVertex2i ( x+64, y    ) ;
     glTexCoord2f ( .5, .5 ) ; glVertex2i ( x+64, y+64 ) ;
     glTexCoord2f (  0, .5 ) ; glVertex2i ( x   , y+64 ) ;
+  }
 
     /*
       Draw Tux last so he doesn't get covered up
@@ -598,6 +655,7 @@ void drawPartlyDigestedHerring ( float state )
 }
 
 
+extern bool network_enabled, network_testing;
 void drawStatusText ()
 {
   if ( text == NULL )
@@ -624,6 +682,11 @@ void drawStatusText ()
 
   if ( kart[0]->getLap () >= num_laps_in_race )
     drawGameOverText     () ;
+  else
+  if ( network_enabled && network_testing )
+  {
+    drawGameNetText () ;
+  }
   else
   {
     drawGameRunningText  () ;

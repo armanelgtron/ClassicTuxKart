@@ -43,7 +43,7 @@ Material gs_setup [] =
   { &pyramidwall_gst,
                    "images/pyramidwall.rgb",
                                           NOCLAMP,FALSE,0.0, TRUE ,1.0, 0 },
-  { &lava_gst    , "images/lava.rgb"    , NOCLAMP,FALSE,0.0, FALSE,1.0, MAT_RESET },
+  { &lava_gst    , "images/lava.rgb"    , NOCLAMP,TRUE,0.0, FALSE,1.0, MAT_RESET },
   { &grid_gst    , "images/metalgrid.rgb",NOCLAMP,TRUE ,0.3, TRUE ,1.0, 0 },
   { &sandstorm_gst,"images/fuzzy_sand.rgb",NOCLAMP,TRUE,0.0, FALSE,1.0, MAT_IGN },
   { &roadway_gst , "images/roadway.rgb" , UCLAMP ,TRUE ,0.0, TRUE ,1.0, 0 },

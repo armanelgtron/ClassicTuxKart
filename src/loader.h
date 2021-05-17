@@ -6,4 +6,5 @@
 
 void init_hooks () ;
 void update_hooks () ;
+void delete_hooks () ;
 

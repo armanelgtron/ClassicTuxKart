@@ -6,6 +6,12 @@ public:
    GFX () ;
    void update () ;
    void done   () ;
+
+   sgVec3 sunposn   ;
+   sgVec4 skyfogcol ;
+   sgVec4 ambientcol ;
+   sgVec4 specularcol ;
+   sgVec4 diffusecol ;
 } ;
 
 

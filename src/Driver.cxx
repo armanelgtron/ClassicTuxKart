@@ -1,20 +1,34 @@
 #include "tuxkart.h"
 
+int fastForward = 0;
 void Driver::update ()
 {
-  float dt = fclock->getDeltaTime () ;
-
-  while ( dt > 0.05f )
+  if(fastForward)
   {
-    delta_t = 0.05f ;
+    delta_t = 0.05f;
+    for(int i=fastForward;--i;)
+    {
+      coreUpdate () ;
+      doObjectInteractions () ;
+    }
     coreUpdate () ;
-    dt -= 0.05f ;
   }
-
-  if ( dt > 0.0f )
+  else
   {
-    delta_t = dt ;
-    coreUpdate () ;
+    float dt = fclock->getDeltaTime () ;
+
+    while ( dt > 0.05f )
+    {
+      delta_t = 0.05f ;
+      coreUpdate () ;
+      dt -= 0.05f ;
+    }
+
+    if ( dt > 0.0f )
+    {
+      delta_t = dt ;
+      coreUpdate () ;
+    }
   }
 
   doObjectInteractions () ;
@@ -85,7 +99,7 @@ void Driver::doZipperProcessing   () { /* Empty by Default. */ }
 void Driver::doCollisionAnalysis  ( float ) { /* Empty by Default. */ }
 
 #define ISECT_STEP_SIZE         0.4f
-#define COLLISION_SPHERE_RADIUS 0.6f
+#define COLLISION_SPHERE_RADIUS 0.4f
 
 float Driver::collectIsectData ( sgVec3 start, sgVec3 end )
 {
@@ -194,6 +208,16 @@ float Driver::getIsectData ( sgVec3 start, sgVec3 end )
 
     if ( dist > 0 && dist < sphere.getRadius() )
     {
+      sgVec3 test;
+      sgCopyVec3 ( test, sphere.getCenter() ) ;
+      //printf("%f\n", curr_pos.hpr[0] ) ;
+      test[0] += velocity.xyz[0] ;
+      test[1] += velocity.xyz[1] ;
+      if ( dist > sgDistToPlaneVec3 ( h->plane, test ) )
+      {
+        crashed = TRUE ;
+      }
+      
       dist = sphere.getRadius() - dist ;
       sgVec3 nrm ;
       sgCopyVec3  ( nrm, h->plane ) ;

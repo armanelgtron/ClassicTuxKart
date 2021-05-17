@@ -13,6 +13,8 @@ extern float tt[6];
 guUDPConnection *net = NULL ;
 ssgLoaderOptions *loader_opts = NULL ;
 
+bool tuxkart_exit = false;
+
 int network_enabled = FALSE ;
 int network_testing = FALSE ;
 
@@ -70,8 +72,12 @@ int       num_karts = 0 ;
 char       *datadir = NULL ;
 ssgRoot      *scene = NULL ;
 Track        *track = NULL ;
-int      cam_follow =  0 ;
+int      cam_follow = 0 ;
+int      cam_mode   = 1 ;
+int      cam_submode= 1 ;
 float    cam_delay  = 10.0f ;
+
+bool       demoMode = false ;
 
 #define MAX_FIXED_CAMERA 9
 
@@ -275,6 +281,14 @@ void load_track ( ssgBranch *trackb, char *fname )
       sound -> change_track ( fname ) ;
     }
     else
+    if ( sscanf ( s, "BG_COLOR %f,%f,%f", &(loc.xyz[0]), &(loc.xyz[1]), &(loc.xyz[3]) ) == 3 )
+    {
+      gfx -> skyfogcol[0] = loc.xyz[0];
+      gfx -> skyfogcol[1] = loc.xyz[1];
+      gfx -> skyfogcol[2] = loc.xyz[2];
+    }
+    }
+    else
     if ( sscanf ( s, "%cHERRING,%f,%f", &htype,
                      &(loc.xyz[0]), &(loc.xyz[1]) ) == 3 )
     {
@@ -422,12 +436,12 @@ static void cmdline_help ()
   printf ( "    tuxkart [OPTIONS] [machine_name]\n\n" ) ;
   printf ( "Options:\n" ) ;
   printf ( "  -h     Display this help message.\n" ) ;
-  printf ( "  -t     Run a network test.\n" ) ;
+  //printf ( "  -t     Run a network test.\n" ) ;
   printf ( "\n" ) ;
 }
 
 
-int tuxkart_main ( int num_laps, char *level_name )
+int tuxkart_main ( int num_laps, char *level_name, int numAIs, char * network )
 {
   net   = new guUDPConnection ;
   fclock = new ulClock ;
@@ -444,12 +458,20 @@ int tuxkart_main ( int num_laps, char *level_name )
 
   trackname = level_name ;
 
-  network_testing = FALSE ;
-  network_enabled = FALSE ;
 /*
   network_enabled = TRUE ;
   net->connect ( argv[i] ) ;
 */
+
+  if( strlen(network) > 0 )
+  {
+    printf("%s\n",network);
+    network_enabled = TRUE;
+    if ( ! net->connect( network ) )
+    {
+      return FALSE ;
+    }
+  }
 
   if ( network_enabled && network_testing )
   {
@@ -525,7 +547,7 @@ int tuxkart_main ( int num_laps, char *level_name )
   curr_track = new Track ( fname ) ;
   gfx   = new GFX ;
 
-  sound = new SoundSystem ;
+  //sound = new SoundSystem ;
   // sound -> change_track ( "mods/Boom_boom_boom.mod" ) ;
   gui   = new GUI ;
 
@@ -550,8 +572,17 @@ int tuxkart_main ( int num_laps, char *level_name )
   red_h     = new Herring ( red    ) ;
   green_h   = new Herring ( green  ) ;
 
-  kart[0] = new PlayerKartDriver ( 0, new ssgTransform ) ;
-  scene -> addKid ( kart[0] -> getModel() ) ;
+
+  if ( demoMode )
+  {
+    kart[0] = new AutoKartDriver ( 0, new ssgTransform ) ;
+    scene -> addKid ( kart[0] -> getModel() ) ;
+  }
+  else
+  {
+    kart[0] = new PlayerKartDriver ( 0, new ssgTransform ) ;
+    scene -> addKid ( kart[0] -> getModel() ) ;
+  }
   kart[0]->getModel()->clrTraversalMaskBits(SSGTRAV_ISECT|SSGTRAV_HOT);
 
   if ( network_enabled )
@@ -559,15 +590,21 @@ int tuxkart_main ( int num_laps, char *level_name )
   else
     kart[1] = new AutoKartDriver ( 1, new ssgTransform ) ;
 
-  scene -> addKid ( kart[1] -> getModel() ) ;
-  kart[1]->getModel()->clrTraversalMaskBits(SSGTRAV_ISECT|SSGTRAV_HOT);
+  if( network_enabled || 1 <= numAIs )
+  {
+    scene -> addKid ( kart[1] -> getModel() ) ;
+    kart[1]->getModel()->clrTraversalMaskBits(SSGTRAV_ISECT|SSGTRAV_HOT);
+  }
 
   int i;
   for ( i = 2 ; i < NUM_KARTS ; i++ )
   {
     kart[i] = new AutoKartDriver ( i, new ssgTransform ) ;
-    scene -> addKid ( kart[i] -> getModel() ) ;
-    kart[i]->getModel()->clrTraversalMaskBits(SSGTRAV_ISECT|SSGTRAV_HOT);
+    if(i <= numAIs)
+    {
+      scene -> addKid ( kart[i] -> getModel() ) ;
+      kart[i]->getModel()->clrTraversalMaskBits(SSGTRAV_ISECT|SSGTRAV_HOT);
+    }
   }
 
 
@@ -587,8 +624,59 @@ int tuxkart_main ( int num_laps, char *level_name )
 
   load_track ( trackb, fname ) ;
 
+  /* set number of karts */
+  if(network_enabled)
+  {
+    /* we need two human karts */
+    num_karts = fmin( (numAIs+2), num_karts );
+  }
+  else
+  {
+    num_karts = fmin( (numAIs+1), num_karts );
+  }
+
+  if(network_enabled)
+  {
+    fprintf ( stderr, "Now we poll and wait for the other client to do something ...\n" ) ;
+
+    network_testing = true;
+
+    ssgSetCamera ( &fixedpos[0] ) ;
+
+    gfx    -> update () ;
+    gui    -> update () ;
+    /*sound  -> update () ;*/
+    gfx    -> done   () ;  /* Swap buffers! */
+    
+    gfx    -> update () ;
+    gui    -> update () ;
+    /*sound  -> update () ;*/
+    gfx    -> done   () ;  /* Swap buffers! */
+
+    int i = 0;
+    while ( true )
+    {
+      if ( i++ > 30 )
+      {
+        /* swap buffers every once in a while */
+        gfx -> done () ;
+        i = 0;
+      }
+      
+      char buffer [ 1024 ] ;
+      net->sendMessage ( "Testing...", 11 ) ;
+      ulMilliSecondSleep(50);
+      if( net->recvMessage( buffer, 1023 ) > 0 )
+        break;
+    }
+    network_testing = false;
+  }
+
 fprintf ( stderr, "READY TO RACE!!\n" ) ;
 
+  tuxkart_exit = false;
+
+  fclock->reset();
   tuxKartMainLoop () ;
   return TRUE ;
 }
@@ -666,55 +754,261 @@ void updateWorld ()
     sgCoord cam, target, diff ;
 
     sgCopyCoord ( &target, kart[cam_follow]->getCoord   () ) ;
-    sgCopyCoord ( &cam   , kart[cam_follow]->getHistory ( (int)cam_delay ) ) ;
 
-    float dist = 5.0f + sgDistanceVec3 ( target.xyz, cam.xyz ) ;
+    float dist;
 
-    if ( dist < MIN_CAM_DISTANCE && cam_delay < 50 )
-      cam_delay++ ;
+    switch ( cam_mode )
+    {
+      /*
+        Camera types... I did not mean there to be so much 
+        copied and pasted code here!
+        
+        subject to change:
+        1 is essentially the original camera
+        2 is similar but also follows the pitch of the kart
+        3 is the camera from the perspective of the driver, in-cam
+        4 is a view from above
+        5 is an even further view from above
+        
+        9 is overhead view
+        10 is various track views
+      */
+      case 1:
+      {
+        sgCopyCoord ( &cam   , kart[cam_follow]->getHistory ( (int)cam_delay ) ) ;
+        
+        dist = 5.0f + sgDistanceVec3 ( target.xyz, cam.xyz ) ;
 
-    if ( dist > MAX_CAM_DISTANCE && cam_delay > 1 )
-      cam_delay-- ;
+        if ( dist < MIN_CAM_DISTANCE && cam_delay < 50 )
+          cam_delay++ ;
 
-    sgVec3 offset ;
-    sgMat4 cam_mat ;
+        if ( dist > MAX_CAM_DISTANCE && cam_delay > 1 )
+          cam_delay-- ;
 
-    sgSetVec3 ( offset, -0.5f, -5.0f, 1.5f ) ;
-    sgMakeCoordMat4 ( cam_mat, &cam ) ;
+        sgVec3 offset ;
+        sgMat4 cam_mat ;
 
-    sgXformPnt3 ( offset, cam_mat ) ;
+        sgSetVec3 ( offset, -0.5f, -5.0f, 1.5f ) ;
+        if(fabs(target.hpr[1]) > 20.f) offset[2] += target.hpr[1]/10.f;
+        
+        sgMakeCoordMat4 ( cam_mat, &cam ) ;
 
-    sgCopyVec3 ( cam.xyz, offset ) ;
+        sgXformPnt3 ( offset, cam_mat ) ;
 
-    cam.hpr[1] = -5.0f ;
-    cam.hpr[2] = 0.0f;
+        sgCopyVec3 ( cam.xyz, offset ) ;
 
-    sgSubVec3 ( diff.xyz, cam.xyz, steady_cam.xyz ) ;
-    sgSubVec3 ( diff.hpr, cam.hpr, steady_cam.hpr ) ;
+        cam.hpr[1] = -5.0f ;
+        cam.hpr[2] = 0.0f;
 
-    while ( diff.hpr[0] >  180.0f ) diff.hpr[0] -= 360.0f ;
-    while ( diff.hpr[0] < -180.0f ) diff.hpr[0] += 360.0f ;
-    while ( diff.hpr[1] >  180.0f ) diff.hpr[1] -= 360.0f ;
-    while ( diff.hpr[1] < -180.0f ) diff.hpr[1] += 360.0f ;
-    while ( diff.hpr[2] >  180.0f ) diff.hpr[2] -= 360.0f ;
-    while ( diff.hpr[2] < -180.0f ) diff.hpr[2] += 360.0f ;
+        sgSubVec3 ( diff.xyz, cam.xyz, steady_cam.xyz ) ;
+        sgSubVec3 ( diff.hpr, cam.hpr, steady_cam.hpr ) ;
 
-    steady_cam.xyz[0] += 0.2f * diff.xyz[0] ;
-    steady_cam.xyz[1] += 0.2f * diff.xyz[1] ;
-    steady_cam.xyz[2] += 0.2f * diff.xyz[2] ;
-    steady_cam.hpr[0] += 0.1f * diff.hpr[0] ;
-    steady_cam.hpr[1] += 0.1f * diff.hpr[1] ;
-    steady_cam.hpr[2] += 0.1f * diff.hpr[2] ;
+        while ( diff.hpr[0] >  180.0f ) diff.hpr[0] -= 360.0f ;
+        while ( diff.hpr[0] < -180.0f ) diff.hpr[0] += 360.0f ;
+        while ( diff.hpr[1] >  180.0f ) diff.hpr[1] -= 360.0f ;
+        while ( diff.hpr[1] < -180.0f ) diff.hpr[1] += 360.0f ;
+        while ( diff.hpr[2] >  180.0f ) diff.hpr[2] -= 360.0f ;
+        while ( diff.hpr[2] < -180.0f ) diff.hpr[2] += 360.0f ;
 
-    final_camera = steady_cam ;
+        steady_cam.xyz[0] += 0.2f * diff.xyz[0] ;
+        steady_cam.xyz[1] += 0.2f * diff.xyz[1] ;
+        steady_cam.xyz[2] += 0.2f * diff.xyz[2] ;
+        steady_cam.hpr[0] += 0.1f * diff.hpr[0] ;
+        steady_cam.hpr[1] += 0.1f * diff.hpr[1] ;
+        steady_cam.hpr[2] += 0.1f * diff.hpr[2] ;
+
+        final_camera = steady_cam ;
+      } break;
+      
+      case 2:
+      {
+        sgCopyCoord ( &cam   , kart[cam_follow]->getHistory ( (int)cam_delay ) ) ;
+        
+        dist = 5.0f + sgDistanceVec3 ( target.xyz, cam.xyz ) ;
+
+        if ( dist < MIN_CAM_DISTANCE && cam_delay < 50 )
+          cam_delay++ ;
+
+        if ( dist > MAX_CAM_DISTANCE && cam_delay > 1 )
+          cam_delay-- ;
+
+        sgVec3 offset ;
+        sgMat4 cam_mat ;
+
+        sgSetVec3 ( offset, -0.5f, -5.0f, 1.5f ) ;
+        sgMakeCoordMat4 ( cam_mat, &cam ) ;
+
+        sgXformPnt3 ( offset, cam_mat ) ;
+
+        sgCopyVec3 ( cam.xyz, offset ) ;
+
+        cam.hpr[1] = ( target.hpr[1] * 0.7 )-5 ;
+        cam.hpr[2] = ( target.hpr[2] * 0.5 ) ;
+
+        sgSubVec3 ( diff.xyz, cam.xyz, steady_cam.xyz ) ;
+        sgSubVec3 ( diff.hpr, cam.hpr, steady_cam.hpr ) ;
+
+        while ( diff.hpr[0] >  180.0f ) diff.hpr[0] -= 360.0f ;
+        while ( diff.hpr[0] < -180.0f ) diff.hpr[0] += 360.0f ;
+        while ( diff.hpr[1] >  180.0f ) diff.hpr[1] -= 360.0f ;
+        while ( diff.hpr[1] < -180.0f ) diff.hpr[1] += 360.0f ;
+        while ( diff.hpr[2] >  180.0f ) diff.hpr[2] -= 360.0f ;
+        while ( diff.hpr[2] < -180.0f ) diff.hpr[2] += 360.0f ;
+
+        steady_cam.xyz[0] += 0.2f * diff.xyz[0] ;
+        steady_cam.xyz[1] += 0.2f * diff.xyz[1] ;
+        steady_cam.xyz[2] += 0.2f * diff.xyz[2] ;
+        steady_cam.hpr[0] += 0.1f * diff.hpr[0] ;
+        steady_cam.hpr[1] += 0.1f * diff.hpr[1] ;
+        steady_cam.hpr[2] += 0.1f * diff.hpr[2] ;
+
+        final_camera = steady_cam ;
+      } break;
+      
+      case 3:
+      {
+        sgCopyCoord ( &cam   , &target ) ;
+
+        sgVec3 offset ;
+        sgMat4 cam_mat ;
+
+        sgSetVec3 ( offset, 0.f, 0.f, 0.8f ) ;
+        sgMakeCoordMat4 ( cam_mat, &cam ) ;
+
+        sgXformPnt3 ( offset, cam_mat ) ;
+
+        sgCopyVec3 ( cam.xyz, offset ) ;
+
+        //cam.hpr[1] = 0.0f ;
+        //cam.hpr[2] = 0.0f ;
+
+        cam.hpr[1] = target.hpr[1] ;
+        cam.hpr[2] = target.hpr[2] ;
+
+
+        sgSubVec3 ( diff.xyz, cam.xyz, steady_cam.xyz ) ;
+        sgSubVec3 ( diff.hpr, cam.hpr, steady_cam.hpr ) ;
+
+        while ( diff.hpr[0] >  180.0f ) diff.hpr[0] -= 360.0f ;
+        while ( diff.hpr[0] < -180.0f ) diff.hpr[0] += 360.0f ;
+        while ( diff.hpr[1] >  180.0f ) diff.hpr[1] -= 360.0f ;
+        while ( diff.hpr[1] < -180.0f ) diff.hpr[1] += 360.0f ;
+        while ( diff.hpr[2] >  180.0f ) diff.hpr[2] -= 360.0f ;
+        while ( diff.hpr[2] < -180.0f ) diff.hpr[2] += 360.0f ;
+
+        steady_cam.xyz[0] = cam.xyz[0] ;
+        steady_cam.xyz[1] = cam.xyz[1] ;
+        steady_cam.xyz[2] = cam.xyz[2] ;
+        steady_cam.hpr[0] += 0.1f * diff.hpr[0] ;
+        steady_cam.hpr[1] += 0.1f * diff.hpr[1] ;
+        steady_cam.hpr[2] += 0.1f * diff.hpr[2] ;
+        
+        
+        final_camera = steady_cam ;
+      } break;
+      
+      case 4:
+      {
+        sgCopyCoord ( &cam   , &target ) ;
+
+        sgVec3 offset ;
+        sgMat4 cam_mat ;
+
+        sgSetVec3 ( offset, -0.5f, -6.f, 5.f+( target.hpr[1] / 10.f ) ) ;
+
+        sgMakeCoordMat4 ( cam_mat, &cam ) ;
+
+        sgXformPnt3 ( offset, cam_mat ) ;
+
+        sgCopyVec3 ( cam.xyz, offset ) ;
+
+        cam.hpr[1] = -30.f ;
+        cam.hpr[2] = 0.f;
+
+        sgSubVec3 ( diff.xyz, cam.xyz, steady_cam.xyz ) ;
+        sgSubVec3 ( diff.hpr, cam.hpr, steady_cam.hpr ) ;
+
+        while ( diff.hpr[0] >  180.0f ) diff.hpr[0] -= 360.0f ;
+        while ( diff.hpr[0] < -180.0f ) diff.hpr[0] += 360.0f ;
+        while ( diff.hpr[1] >  180.0f ) diff.hpr[1] -= 360.0f ;
+        while ( diff.hpr[1] < -180.0f ) diff.hpr[1] += 360.0f ;
+        while ( diff.hpr[2] >  180.0f ) diff.hpr[2] -= 360.0f ;
+        while ( diff.hpr[2] < -180.0f ) diff.hpr[2] += 360.0f ;
+
+        steady_cam.xyz[0] += 0.2f * diff.xyz[0] ;
+        steady_cam.xyz[1] += 0.2f * diff.xyz[1] ;
+        steady_cam.xyz[2] += 0.2f * diff.xyz[2] ;
+        steady_cam.hpr[0] += 0.1f * diff.hpr[0] ;
+        steady_cam.hpr[1] += 0.1f * diff.hpr[1] ;
+        steady_cam.hpr[2] += 0.1f * diff.hpr[2] ;
+
+        final_camera = steady_cam ;
+      } break;
+
+      case 5:
+      {
+        sgCopyCoord ( &cam   , &target ) ;
+
+        sgVec3 offset ;
+        sgMat4 cam_mat ;
+
+        sgSetVec3 ( offset, -0.5f, -6.5f, 8.f ) ;
+
+        sgMakeCoordMat4 ( cam_mat, &cam ) ;
+
+        sgXformPnt3 ( offset, cam_mat ) ;
+
+        sgCopyVec3 ( cam.xyz, offset ) ;
+
+        cam.hpr[1] = -40.f ;
+        cam.hpr[2] = 0.f;
+
+        sgSubVec3 ( diff.xyz, cam.xyz, steady_cam.xyz ) ;
+        sgSubVec3 ( diff.hpr, cam.hpr, steady_cam.hpr ) ;
+
+        while ( diff.hpr[0] >  180.0f ) diff.hpr[0] -= 360.0f ;
+        while ( diff.hpr[0] < -180.0f ) diff.hpr[0] += 360.0f ;
+        while ( diff.hpr[1] >  180.0f ) diff.hpr[1] -= 360.0f ;
+        while ( diff.hpr[1] < -180.0f ) diff.hpr[1] += 360.0f ;
+        while ( diff.hpr[2] >  180.0f ) diff.hpr[2] -= 360.0f ;
+        while ( diff.hpr[2] < -180.0f ) diff.hpr[2] += 360.0f ;
+
+        steady_cam.xyz[0] += 0.2f * diff.xyz[0] ;
+        steady_cam.xyz[1] += 0.2f * diff.xyz[1] ;
+        steady_cam.xyz[2] += 0.2f * diff.xyz[2] ;
+        steady_cam.hpr[0] += 0.1f * diff.hpr[0] ;
+        steady_cam.hpr[1] += 0.1f * diff.hpr[1] ;
+        steady_cam.hpr[2] += 0.1f * diff.hpr[2] ;
+
+        final_camera = steady_cam ;
+      } break;
+
+      case 9:
+        final_camera = fixedpos[0] ;
+        break;
+
+      case 10:
+        if(cam_submode < 9)
+          final_camera = fixedpos[cam_submode] ;
+        break;
+
+    }
   }
   else
+  {
+    /* Wrap around */
+    if(cam_follow < 16) cam_follow = 0;
+    else cam_follow = num_karts-1;
+    final_camera = steady_cam ;
+  }
+  /*
   if ( cam_follow < num_karts + MAX_FIXED_CAMERA )
   {
     final_camera = fixedpos[cam_follow-num_karts] ;
   }
   else
     final_camera = steady_cam ;
+  */
 
   sgVec3 interfovealOffset ;
   sgMat4 mat ;
@@ -727,45 +1021,86 @@ void updateWorld ()
 }
 
 
+extern int next_hook ;
 
-void tuxKartMainLoop ()
+void tuxKartMain ()
 {
-  while ( 1 )
+  if ( ! gui -> isPaused () )
   {
-    if ( ! gui -> isPaused () )
-    {
-      fclock->update () ;
-      ck2.update() ; tt[0] = ck2.getDeltaTime()*1000.0f ;
-      updateWorld () ;
+    fclock->update () ;
+    ck2.update() ; tt[0] = ck2.getDeltaTime()*1000.0f ;
+    updateWorld () ;
 
-      for ( int i = 0 ; i < MAX_HERRING ; i++ )
-        if ( herring [ i ] . her != NULL )
-          herring [ i ] . update () ;
+    for ( int i = 0 ; i < MAX_HERRING ; i++ )
+      if ( herring [ i ] . her != NULL )
+        herring [ i ] . update () ;
 
-      silver_h -> update () ;
-      gold_h   -> update () ;
-      red_h    -> update () ;
-      green_h  -> update () ;
+    silver_h -> update () ;
+    gold_h   -> update () ;
+    red_h    -> update () ;
+    green_h  -> update () ;
 
-      update_hooks () ;
-    }
-    else
-    {
-      ck2.update() ; tt[0] = ck2.getDeltaTime()*1000.0f ;
-      ck2.update() ; tt[1] = ck2.getDeltaTime()*1000.0f ;
-      ck2.update() ; tt[2] = ck2.getDeltaTime()*1000.0f ;
-      ck2.update() ; tt[3] = ck2.getDeltaTime()*1000.0f ;
-    }
+    update_hooks () ;
+  }
+  else
+  {
+    ck2.update() ; tt[0] = ck2.getDeltaTime()*1000.0f ;
+    ck2.update() ; tt[1] = ck2.getDeltaTime()*1000.0f ;
+    ck2.update() ; tt[2] = ck2.getDeltaTime()*1000.0f ;
+    ck2.update() ; tt[3] = ck2.getDeltaTime()*1000.0f ;
+  }
 
 /*track  -> update () ; */
 
-    ck2.update() ; tt[4] = ck2.getDeltaTime()*1000.0f ;
-    gfx    -> update () ;
-    gui    -> update () ;
-    sound  -> update () ;
-    gfx    -> done   () ;  /* Swap buffers! */
-    ck2.update() ; tt[5] = ck2.getDeltaTime()*1000.0f ;
+  ck2.update() ; tt[4] = ck2.getDeltaTime()*1000.0f ;
+  gfx    -> update () ;
+  gui    -> update () ;
+  sound  -> update () ;
+  gfx    -> done   () ;  /* Swap buffers! */
+  ck2.update() ; tt[5] = ck2.getDeltaTime()*1000.0f ;
+}
+
+void tuxKartCleanUp ()
+{
+  fprintf ( stderr, "Goodbye.\n" ) ;
+    
+  int i;
+
+  delete_hooks () ;
+
+  for ( i = 0 ; i < NUM_KARTS ; i++ )
+  {
+     delete kart[i] ;
+     kart[i] = NULL ;
   }
+  
+  for ( i = 0 ; i < MAX_HERRING ; i++ )
+  {
+     herring[i].eaten = false ;
+     herring[i].time_to_return = 0 ;
+     
+     //delete herring[i].her ;
+     herring[i].her = NULL ;
+     
+     //ssgDelete ( herring[i].scs ) ;
+  }
+  num_herring = 0;
+  
+  
+  delete gfx ;
+  //delete sound ;
+  delete gui ;
+  
+  delete scene ;
+}
+
+void tuxKartMainLoop ()
+{
+  while ( ! tuxkart_exit )
+  {
+    tuxKartMain () ;
+  }
+  tuxKartCleanUp () ;
 }
 
 

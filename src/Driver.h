@@ -114,6 +114,7 @@ public:
   int  getLap      ()        { return lap      ; }
   int  getPosition ()        { return position ; }
   void setPosition ( int p ) { position = p    ; }
+  bool isOnGround  ()        { return on_ground; }
 
   void reset ()
   {

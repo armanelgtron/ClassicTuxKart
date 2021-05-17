@@ -48,6 +48,14 @@ else
 fi
 
 
+dnl Check for SDL mixer support...
+AC_CHECK_LIB(SDL_mixer,Mix_OpenAudio,
+AC_DEFINE(USE_SDL_MIXER, 1, [Define if you have the SDL_mixer library (-lSDL_mixer).])
+LIBS="$LIBS -lSDL -lSDL_mixer",
+AC_MSG_WARN([
+SDL_mixer library not found.])
+,)
+
 
 dnl Check SGI audio library
 
@@ -85,12 +93,12 @@ if test "x$ac_cv_header_windows_h" != "xyes" ; then
     CFLAGS="$CFLAGS -I/usr/local/include -L/usr/local/lib"
     CXXFLAGS="$CXXFLAGS -I/usr/local/include -L/usr/local/lib"
   else
-    CFLAGS="$CFLAGS -O6 -Wall"
-    CXXFLAGS="$CXXFLAGS -O6 -Wall"
+    CFLAGS="$CFLAGS -O2 -Wall"
+    CXXFLAGS="$CXXFLAGS -O2 -Wall"
   fi
 else
-  CFLAGS="$CFLAGS -O6 -Wall $MACH -malign-double -I/usr/local/include -L/usr/local/lib"
-  CXXFLAGS="$CXXFLAGS -O6 -Wall $MACH -malign-double -I/usr/local/include -L/usr/local/lib"
+  CFLAGS="$CFLAGS -O2 -Wall $MACH -malign-double -I/usr/local/include -L/usr/local/lib"
+  CXXFLAGS="$CXXFLAGS -O2 -Wall $MACH -malign-double -I/usr/local/include -L/usr/local/lib"
 fi
 
 MY_EXPAND_DIR(tuxkart_datadir, "$datadir/games/$PACKAGE")

@@ -1,5 +1,8 @@
 
-#include "start_tuxkart.h"
+//#include "start_tuxkart.h"
+#include "tuxkart.h"
+#include <plib/pu.h>
+#include <signal.h>
 
 int width=800,height=600,fullscreen=0;
 extern int player;
@@ -10,18 +13,28 @@ extern int player;
 *                                   *
 \***********************************/
 
+static int numAIs = 3 ;
 static int numLaps = 5 ;
 
+static char * hostname = "";
+
 static char        numLapsLegend [ 100 ] ;
+static char        numAIsLegend  [ 100 ] ;
 static char        *datadir = 0 ;
 
+//static puButton    *cheaterAIs    ;
+static puInput     *hostnameText  ;
+static puSlider    *numAIsSlider  ;
+static puButton    *numAIsText    ;
 static puSlider    *numLapsSlider ;
 static puButton    *numLapsText   ;
 static puButton    *playButton    ;
 static puButton    *exitButton    ;
 static puButtonBox *trackButtons  ;
-static fntTexFont  *fnt ;
+static fntTexFont  *fnt_sorority  ;
 static puFont      *sorority      ;
+static fntTexFont  *fnt_avantgarde;
+static puFont      *avantgarde    ;
 
 static ssgSimpleState *intro_gst ;
 
@@ -33,7 +46,10 @@ static int startup_counter = 0 ;
 static char *track_names  [ MAX_TRACKS ] ;
 static char *track_idents [ MAX_TRACKS ] ;
 
-extern int tuxkart_main ( int nl, char *track ) ;
+extern int tuxkart_main ( int nl, char *track, int, char * ) ;
+extern void main_menu_init();
+extern bool tuxkart_exit;
+extern bool aiCheats;
 
 static void switch_to_game ()
 {
@@ -43,17 +59,32 @@ static void switch_to_game ()
   trackButtons -> getValue ( & t ) ;
   nl = atoi ( numLapsText->getLegend () ) ;
 
+  //aiCheats = atoi(cheaterAIs->getStringValue());
+  aiCheats = false;
+  printf("aicheats = %i\n",aiCheats);
+
   puDeleteObject ( pleaseWaitButton ) ;
+  //puDeleteObject ( cheaterAIs    ) ;
+  puDeleteObject ( hostnameText  ) ;
+  puDeleteObject ( numAIsSlider  ) ;
+  puDeleteObject ( numAIsText    ) ;
   puDeleteObject ( numLapsSlider ) ;
   puDeleteObject ( numLapsText   ) ;
   puDeleteObject ( playButton    ) ;
   puDeleteObject ( exitButton    ) ;
   puDeleteObject ( trackButtons  ) ;
   delete intro_gst ;
-  delete sorority  ;
-  delete fnt       ;
+  
+  delete fnt_sorority  ;
+  delete sorority      ;
+  delete fnt_avantgarde;
+  delete avantgarde    ;
 
-  tuxkart_main ( nl, track_idents[t] ) ;
+  tuxkart_main ( nl, track_idents[t], numAIs, hostname ) ;
+
+  /* we come back here after leaving the race */
+
+  main_menu_init();
 }
 
 /*********************************\
@@ -69,6 +100,7 @@ static void keyfn ( int key, int updown, int, int )
   puKeyboard ( key, updown ) ;
 }
 
+/*
 static void motionfn ( int x, int y )
 {
   puMouse ( x, y ) ;
@@ -77,6 +109,14 @@ static void motionfn ( int x, int y )
 static void mousefn ( int button, int updown, int x, int y )
 {
   puMouse ( button, updown, x, y ) ;
+}
+*/
+
+static void resizefn ( int w, int h )
+{
+  printf("%i, %i\n",w, h);
+  width = w; height = h;
+  pwSetSize ( width, height ) ;
 }
 
 /***********************************\
@@ -136,8 +176,15 @@ static void displayfn (void)
 static void play_cb ( puObject * )
 {
   puSetDefaultColourScheme ( 123.0f/255.0f, 0.0f/255.0f, 34.0f/255.0f, 1.0) ;
+  
   pleaseWaitButton = new puButton ( 100, 240,
                                "LOADING: PLEASE WAIT FOR A MINUTE OR TWO"  ) ;
+
+  hostname = hostnameText->getStringValue();
+  /*if(strlen(hostname) != 0)
+  {
+    pleaseWaitButton->setLegend( "PLEASE MAKE SURE THE OTHER USER IS READY"  ) ;
+  }*/
 
   startup_counter = 3 ;
 }
@@ -164,6 +211,21 @@ static void numLapsSlider_cb ( puObject *)
 
   sprintf ( numLapsLegend, "%2d", numLaps ) ;
   numLapsText->setLegend ( numLapsLegend ) ;
+}
+
+static void numAIsSlider_cb ( puObject *)
+{
+  float d ;
+
+  numAIsSlider->getValue ( & d ) ;
+
+  numAIs = (int)( d / 0.25f ) ;
+
+  if ( numAIs <  0 ) numAIs =  0 ;
+  if ( numAIs >  3 ) numAIs =  3 ;
+
+  sprintf ( numAIsLegend, "%2d", numAIs ) ;
+  numAIsText->setLegend ( numAIsLegend ) ;
 }
 
 static void install_material ()
@@ -245,8 +307,57 @@ static void loadTrackList ()
 }
 
 
+extern void cmdline_help();
+extern bool network_enabled, network_testing;
+bool netClient = false;
+extern int fastForward;
+extern bool demoMode;
+extern int tuxkart_main_net(char * host);
 int main ( int argc, char **argv )
 {
+  bool immediatePlay = false;
+  char * trackName;
+  //if(argv[1])
+  for(int i = 1; argv[i]; ++i )
+  {
+    if(strcmp(argv[i],"-h") == 0 || strcmp(argv[i],"--help") == 0)
+    {
+      cmdline_help();
+      return 0;
+    }
+    else if(strcmp(argv[i],"-n") == 0)
+    {
+      network_enabled = TRUE;
+    }
+    else if(strcmp(argv[i],"-t") == 0)
+    {
+      trackName = argv[++i];
+      immediatePlay = true;
+    }
+    else if(strcmp(argv[i],"-d") == 0)
+    {
+      demoMode = true;
+      immediatePlay = true;
+    }
+    else if(strcmp(argv[i],"-l") == 0)
+    {
+      numLaps = atoi ( argv[++i] );
+    }
+    else if(strcmp(argv[i],"-k") == 0)
+    {
+      numAIs = atoi ( argv[++i] ) ;
+    }
+    else if(strcmp(argv[i],"--fastforward") == 0)
+    {
+      fastForward = atoi ( argv[++i] ) ;
+    }
+    /*else
+    {
+      network_enabled = TRUE;
+      netClient = true;
+    }*/
+  }
+
   /* Set tux_aqfh_datadir to the correct directory */
  
   if ( datadir == NULL )
@@ -290,16 +401,46 @@ int main ( int argc, char **argv )
 
   loadTrackList () ;
 
-  pwInit ( 0, 0, width, height, FALSE, "Tux Kart by Steve Baker", TRUE, 0 ) ;
+  pwInit ( 0, 0, width, height, FALSE, "Classic Tux Kart", TRUE, 0 ) ;
 
-  pwSetCallbacks ( keyfn, mousefn, motionfn, NULL, NULL ) ;
+  pwSetCallbacks ( keyfn, mousefn, motionfn, resizefn, NULL ) ;
 
   puInit () ;
   ssgInit () ;
 
-  fnt = new fntTexFont ;
-  fnt -> load ( "fonts/sorority.txf" ) ;
-  sorority = new puFont ( fnt, 12 ) ;
+  sound = new SoundSystem ;
+
+  if(immediatePlay)
+  {
+    tuxkart_main ( numLaps, trackName, numAIs, hostname ) ;
+  }
+
+/*
+  if(netClient)
+  {
+    return tuxkart_main_net( argv[1] );
+  }
+*/
+
+  main_menu_init();
+  
+
+  while ( 1 )
+    displayfn () ;
+
+  return 0 ;
+}
+
+void main_menu_init()
+{
+
+  fnt_sorority = new fntTexFont ;
+  fnt_sorority -> load ( "fonts/sorority.txf" ) ;
+  sorority = new puFont ( fnt_sorority, 12 ) ;
+  
+  fnt_avantgarde = new fntTexFont ;
+  fnt_avantgarde -> load ( "fonts/AvantGarde-Demi.txf" ) ;
+  avantgarde = new puFont ( fnt_avantgarde, 11 ) ;
 
   puSetDefaultFonts        ( *sorority, *sorority ) ;
   puSetDefaultStyle        ( PUSTYLE_SMALL_SHADED ) ;
@@ -313,31 +454,61 @@ int main ( int argc, char **argv )
   exitButton = new puButton     ( 180, 10, 250, 50 ) ;
   exitButton->setLegend         ( "Quit"  ) ;
   exitButton->setCallback       ( exit_cb ) ;
-   
+
+
+  numAIsSlider = new puSlider  ( 10, 130, 150 ) ;
+  numAIsSlider->setLabelPlace ( PUPLACE_ABOVE ) ;
+  numAIsSlider->setLabel  ( "How Many AIs?" ) ;
+  numAIsSlider->setDelta  ( 0.40 ) ;
+  numAIsSlider->setCBMode ( PUSLIDER_ALWAYS ) ;
+  numAIsSlider->setValue  ( ((numAIs)*0.28f) ) ;
+  numAIsSlider->setCallback ( numAIsSlider_cb ) ;
+
+  numAIsText = new puButton ( 160, 130, " 3" ) ;
+  numAIsText->setStyle ( PUSTYLE_BOXED ) ;
+
+  sprintf ( numAIsLegend, "%2d", numAIs ) ;
+  numAIsText->setLegend ( numAIsLegend ) ;
+
+
   numLapsSlider = new puSlider  ( 10, 80, 150 ) ;
   numLapsSlider->setLabelPlace ( PUPLACE_ABOVE ) ;
   numLapsSlider->setLabel  ( "How Many Laps?" ) ;
   numLapsSlider->setDelta  ( 0.05 ) ;
   numLapsSlider->setCBMode ( PUSLIDER_ALWAYS ) ;
-  numLapsSlider->setValue  ( 1.0f*0.05f*(5.0f-1.0f) ) ;
+  numLapsSlider->setValue  ( ((numLaps-1)*0.05f) ) ;
   numLapsSlider->setCallback ( numLapsSlider_cb ) ;
 
   numLapsText = new puButton ( 160, 80, " 5" ) ;
   numLapsText->setStyle ( PUSTYLE_BOXED ) ;
 
-  trackButtons = new puButtonBox ( 400, 10, 630, 150, track_names, TRUE ) ;
+  sprintf ( numLapsLegend, "%2d", numLaps ) ;
+  numLapsText->setLegend ( numLapsLegend ) ;
+
+
+  trackButtons = new puButtonBox ( 400, 8, 630, 167, track_names, TRUE ) ;
   trackButtons -> setLabel ( "Which Track?" ) ;
   trackButtons -> setLabelPlace ( PUPLACE_ABOVE ) ;
   trackButtons -> setValue ( 0 ) ; 
 
+
+  /*
+  cheaterAIs = new puButton ( 204, 130, 384, 160 , PUBUTTON_NORMAL ) ;
+  cheaterAIs->setLegend     ( "Classic AI Speedup" ) ;
+  */
+
+
+  hostnameText = new puInput  ( 204, 80, 384, 110 ) ;
+  hostnameText->setLabelPlace ( PUPLACE_ABOVE ) ;
+  hostnameText->setLabel  ( "Hostname" ) ;
+  hostnameText->setLegendFont   ( *avantgarde ) ;
+  hostnameText->setValue  ( "" ) ;
+
+  sound -> change_track ( "oggs/main_theme.ogg" ) ;
+
   install_material () ;
 
   signal ( 11, SIG_DFL ) ;
-
-  while ( 1 )
-    displayfn () ;
-
-  return 0 ;
 }
 
 

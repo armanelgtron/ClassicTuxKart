@@ -65,16 +65,7 @@ GFX::GFX ()
   sgSetVec3 ( cam.xyz, 0, 0, 0 ) ;
   sgSetVec3 ( cam.hpr, 0, 0, 0 ) ;
   ssgSetCamera ( & cam ) ;
-}
 
-
-void GFX::update ()
-{
-  sgVec3 sunposn   ;
-  sgVec4 skyfogcol ;
-  sgVec4 ambientcol ;
-  sgVec4 specularcol ;
-  sgVec4 diffusecol ;
 
   sgSetVec3 ( sunposn, 0.4, 0.4, 0.4 ) ;
 
@@ -83,6 +74,11 @@ void GFX::update ()
   sgSetVec4 ( specularcol, 1.0, 1.0, 1.0, 1.0 ) ;
   sgSetVec4 ( diffusecol , 1.0, 1.0, 1.0, 1.0 ) ;
 
+}
+
+
+void GFX::update ()
+{
   ssgGetLight ( 0 ) -> setPosition ( sunposn ) ;
   ssgGetLight ( 0 ) -> setColour ( GL_AMBIENT , ambientcol  ) ;
   ssgGetLight ( 0 ) -> setColour ( GL_DIFFUSE , diffusecol  ) ;

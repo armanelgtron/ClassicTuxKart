@@ -45,6 +45,16 @@ void init_hooks ()
     hooklist [ i ] -> ref () ;
   }
 }
+
+void delete_hooks ()
+{
+  for ( int i = 0 ; i < MAX_HOOKS ; i++ )
+  {
+    ssgDeRefDelete ( hooklist [ i ] ) ;
+  }
+  next_hook = 0;
+}
+
                                                                                  
 void hit_hook ( ssgEntity *ent, sgMat4 * /*last_mat*/, sgMat4 * /*curr_mat*/ )
 {
@@ -338,6 +348,8 @@ ssgBranch *process_userdata ( char *data )
     add_hook ( autodcsHook, NULL, b, p ) ;
     return b ;
   }
+
+  fprintf ( stderr, "Warning: Ignoring userdata '%s'\n", data );
   
   return NULL ;
 }

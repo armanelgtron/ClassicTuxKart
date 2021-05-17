@@ -63,7 +63,7 @@ void KartDriver::doObjectInteractions ()
 
     sgSubVec3 ( xyz, getCoord()->xyz, kart [ i ] -> getCoord () -> xyz ) ;
 
-    if ( sgLengthSquaredVec2 ( xyz ) < 1.0f )
+    if ( sgLengthSquaredVec2 ( xyz ) < 1.0f && ( fabs ( xyz[2] ) < 1 )  )
     {
       if ( this == kart[0] || i == 0 )
         sound->playSfx ( SOUND_OW ) ;
@@ -234,7 +234,12 @@ void KartDriver::update ()
 
       curr_track -> trackToSpatial ( curr_pos.xyz, track_hint ) ;
 
-      curr_pos.xyz[2] = d ;
+      
+      sgVec2 next_coords ;
+      curr_track -> trackToSpatial ( next_coords, track_hint + 1 ) ;
+      curr_pos.hpr[0] = SG_RADIANS_TO_DEGREES * atan2 ( curr_pos.xyz[1]-next_coords[1], curr_pos.xyz[0]-next_coords[0] ) ;
+      curr_pos.hpr[0] += 90;
+      
     }
 
     attachment -> select ( 0 ) ;

@@ -70,6 +70,13 @@ static void music_on_cb      ( puObject * ) { sound->enable_music  () ; }
 static void sfx_off_cb       ( puObject * ) { sound->disable_sfx   () ; } 
 static void sfx_on_cb        ( puObject * ) { sound->enable_sfx    () ; } 
 
+
+extern bool tuxkart_exit ;
+static void menu_cb ( puObject * )
+{
+  tuxkart_exit = true;
+}
+
 static void exit_cb ( puObject * )
 {
   fprintf ( stderr, "Exiting TuxKart.\n" ) ;
@@ -78,8 +85,8 @@ static void exit_cb ( puObject * )
 
 /* Menu bar entries: */
 
-static char      *exit_submenu    [] = {  "Exit", NULL } ;
-static puCallback exit_submenu_cb [] = { exit_cb, NULL } ;
+static char      *exit_submenu    [] = {  "Main Menu", "Exit", NULL } ;
+static puCallback exit_submenu_cb [] = { menu_cb, exit_cb, NULL } ;
 
 static char      *sound_submenu    [] = { "Turn off Music", "Turn off Sounds", "Turn on Music", "Turn on Sounds", NULL } ;
 static puCallback sound_submenu_cb [] = {  music_off_cb,        sfx_off_cb,     music_on_cb,        sfx_on_cb, NULL } ;
@@ -156,6 +163,8 @@ void GUI::update ()
 }
 
 
+extern bool network_enabled;
+extern int cam_mode, cam_submode ;
 void GUI::keyboardInput ()
 {
   static int isWireframe = FALSE ;
@@ -167,19 +176,40 @@ void GUI::keyboardInput ()
   int i;
   switch ( c )
   {
-    case 0x1B /* Escape */      :
-    case 'x'  /* X */      :
-    case 'X'  /* X */      :
+    case 0x1B /* Escape */ :  tuxkart_exit = true; break;
+
+    //case 'x'  /* X */      :
+    //case 'X'  /* X */      :
     case 0x03 /* Control-C */   : exit ( 0 ) ;
 
     case PW_KEY_PAGE_UP   : cam_follow-- ; break ;
     case PW_KEY_PAGE_DOWN : cam_follow++ ; break ;
 
+    case '1' : cam_mode = 1 ; break ;
+    case '2' : cam_mode = 2 ; break ;
+    case '3' : cam_mode = 3 ; break ;
+    case '4' : cam_mode = 4 ; break ;
+    case '5' : cam_mode = 5 ; break ;
+    //case '6' : cam_mode = 6 ; break ;
+    //case '7' : cam_mode = 7 ; break ;
+    //case '8' : cam_mode = 8 ; break ;
+    case '9' : cam_mode = 9 ; break ;
+    case '0' : cam_mode = 10 ; break ;
+
+    case '-' :
+    case '_' : if(cam_submode > 1) cam_submode -- ; break ;
+
+    case '=' :
+    case '+' : if(cam_submode < 9) cam_submode ++ ; break ;
+
     case 'r' :
     case 'R' :
-               finishing_position = -1 ;
-               for ( i = 0 ; i < num_karts ; i++ )
-                 kart[i]->reset() ;
+               if ( ! network_enabled )
+               {
+                 finishing_position = -1 ;
+                 for ( i = 0 ; i < num_karts ; i++ )
+                   kart[i]->reset() ;
+               }
                return ;
  
     case 'w' :
@@ -208,8 +238,10 @@ void GUI::keyboardInput ()
 }
 
 
+extern bool demoMode;
 void GUI::joystickInput ()
 {
+  if (demoMode) return;
   static JoyInfo ji ;
 
   if ( joystick -> notWorking () )

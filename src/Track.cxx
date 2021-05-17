@@ -2,7 +2,7 @@
 #include "tuxkart.h"
 
 static int npoints ;
-static sgVec3 driveline[MAX_DRIVELINE] ;
+static sgVec4 driveline[MAX_DRIVELINE] ;
 
 Track::Track ( char *fname )
 {
@@ -27,17 +27,22 @@ Track::Track ( char *fname )
     if ( *s == '#' || *s < ' ' )
       continue ;
 
-    float x, y ;
+    float x, y, z ;
 
-    if ( sscanf ( s, "%f,%f", &x, &y ) != 2 )
+    if ( sscanf ( s, "%f,%f,%f", &x, &y, &z ) != 3 )
     {
-      fprintf ( stderr, "Syntax error in '%s'\n", fname ) ;
-      exit ( 1 ) ;
-    } 
+      if ( sscanf ( s, "%f,%f", &x, &y ) != 2 )
+      {
+        fprintf ( stderr, "Syntax error in '%s'\n", fname ) ;
+        exit ( 1 ) ;
+      } 
+      z = 0.0f;
+    }
 
     driveline[i][0] = x ;
     driveline[i][1] = y ;
-    driveline[i][2] = 0.0f ;
+    driveline[i][2] = z ;
+    driveline[i][3] = 0.f;
     npoints = i + 1 ;
   }
 
@@ -53,7 +58,7 @@ Track::Track ( char *fname )
     if ( driveline[i][0] > max[0] ) max[0] = driveline[i][0] ;
     if ( driveline[i][1] > max[1] ) max[1] = driveline[i][1] ;
 
-    driveline [i][2] = d ;
+    driveline [i][3] = d ;
 
     if ( i == npoints - 1 )
       d += sgDistanceVec2 ( driveline[i], driveline[0] ) ;
@@ -88,7 +93,16 @@ fprintf(stderr,"ih=%d ", hint ) ;
   {
     for ( int i = 0 ; i < npoints ; i++ )
     {
+      /*
+        Original TuxKart does not take any third dimension into account
+        It's really problematic on any more complex maps...
+      */
+      
       d = sgDistanceVec2 ( driveline[i], xyz ) ;
+      #if 1
+        /* Custom weight for z axis */
+        d += fabs(driveline[i][2]-xyz[2])*2.f;
+      #endif
 
       if ( d < nearest_d )
       {
@@ -176,7 +190,7 @@ fprintf(stderr,"new hint=%d\n", nearest ) ;
 
   sgAddScaledVec2 ( tmp, xyz, line_eqn, -res [0] ) ;
 
-  res [ 1 ] = sgDistanceVec2 ( tmp, driveline[p1] ) + driveline[p1][2] ;
+  res [ 1 ] = sgDistanceVec2 ( tmp, driveline[p1] ) + driveline[p1][3] ;
 
   return nearest ;
 }

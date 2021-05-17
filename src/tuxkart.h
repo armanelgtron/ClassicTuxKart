@@ -17,7 +17,11 @@
 
 #include <plib/pw.h>
 #include <plib/ssg.h>
-#include <plib/sl.h>
+#ifdef USE_SDL_MIXER
+  #include <SDL/SDL_mixer.h>
+#else
+  #include <plib/sl.h>
+#endif
 #include <plib/js.h>
 #include <plib/fnt.h>
 

@@ -2,8 +2,38 @@
 TuxKart Change Log.
 ===================
 
-TuxKart v0.4.0 (March 19th 2004)
+ClassicTuxKart v0.5.0 (maybe?)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  * Add title menu music
+
+  * Allow selecting number of AIs
+
+  * Enable use of the primitive, incomplete network support
+
+  * Escape brings you back to the title menu
+
+  * Switch units from mph to km/h
+
+  * Added two tracks from earlier STK:
+    Star Track and On The Beach
+
+  * Add additional cameras:
+    buttons 1 - 9, +/- for sub- cameras
+
+  * Make surface slope affect acceleration
+
+  * Rescue puts players back at the correct direction
+
+  * Rescue can be used even mid-air
+
+  * AIs attempt to do wheelies to speed up now
+
+  * Use SDL Mixer for music and sound
+
+  * Add autogen.sh from the CVS repo
+
+TuxKart v0.4.0 (March 19th 2004)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   * Changes for compatibility with PLIB 1.8.0 and later.
   * Removed some features that were only there to support
     truly ancient graphics cards like 3Dfx Voodoo-1/2.
